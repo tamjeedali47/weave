@@ -6,6 +6,7 @@ import {
   type InsertOp,
   type Op,
   type ReplicaId,
+  type TextChange,
 } from "./types.js";
 
 interface Node {
@@ -33,6 +34,13 @@ interface Node {
  */
 export class FugueDoc {
   readonly replica: ReplicaId;
+
+  /**
+   * Called for each remote op that changes the visible text, after it is
+   * applied. Finding the position costs a walk of the tree, so it is only done
+   * while a listener is set.
+   */
+  onRemoteChange: ((change: TextChange) => void) | null = null;
 
   private readonly root: Node = {
     id: null,
@@ -111,7 +119,22 @@ export class FugueDoc {
         `Op ${idKey(op.id)} not ready: expected counter ${seen + 1} from ${op.id.replica}`,
       );
     }
-    this.applyReady(op);
+    const listener = this.onRemoteChange;
+    if (listener === null) {
+      this.applyReady(op);
+      return true;
+    }
+    if (op.type === "insert") {
+      const node = this.applyReady(op)!;
+      listener({ type: "insert", index: this.visibleIndexOf(node), text: node.char });
+    } else {
+      // Locate the target before it disappears from the visible text. If it is
+      // missing, applyReady throws; if already deleted, nothing visible changes.
+      const target = this.nodes.get(idKey(op.target));
+      const index = target !== undefined && !target.deleted ? this.visibleIndexOf(target) : -1;
+      this.applyReady(op);
+      if (index !== -1) listener({ type: "delete", index, count: 1 });
+    }
     return true;
   }
 
@@ -219,6 +242,16 @@ export class FugueDoc {
       position++;
     }
     return result;
+  }
+
+  /** Position of a visible node among the visible nodes. */
+  private visibleIndexOf(target: Node): number {
+    let position = 0;
+    for (const node of this.traverse()) {
+      if (node === target) return position;
+      if (!node.deleted) position++;
+    }
+    throw new Error("Node is not in the tree");
   }
 
   /**

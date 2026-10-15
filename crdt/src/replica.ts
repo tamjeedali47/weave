@@ -1,5 +1,13 @@
 import { FugueDoc } from "./fugue.js";
-import { idKey, type DeleteOp, type Id, type InsertOp, type Op, type ReplicaId } from "./types.js";
+import {
+  idKey,
+  type DeleteOp,
+  type Id,
+  type InsertOp,
+  type Op,
+  type ReplicaId,
+  type TextChange,
+} from "./types.js";
 
 export type VersionVector = Readonly<Record<ReplicaId, number>>;
 
@@ -36,6 +44,15 @@ export class Replica {
 
   get length(): number {
     return this.doc.length;
+  }
+
+  /**
+   * Called for every received op (including ones released from the buffer)
+   * that changes the visible text. Local edits are not reported: the caller
+   * made them, so it already knows.
+   */
+  set onRemoteChange(listener: ((change: TextChange) => void) | null) {
+    this.doc.onRemoteChange = listener;
   }
 
   /** Number of ops received but not yet applied. */

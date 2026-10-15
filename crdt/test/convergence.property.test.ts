@@ -9,7 +9,8 @@ import { idKey, Replica, type Op, type ReceiveResult } from "../src/index.js";
  * a network that delivers messages in any order, duplicates some, and loses
  * messages to replicas that are offline, plus replicas going offline and
  * syncing on reconnect. At the end the network heals and every replica must
- * hold the same text with no edit lost or resurrected.
+ * hold the same text with no edit lost or resurrected, and the position of
+ * every reported remote change must be correct (what an editor relies on).
  *
  * WEAVE_PBT_RUNS sets the number of histories; WEAVE_PBT_SEED replays a seed
  * that fast-check printed for a failure.
@@ -95,6 +96,12 @@ interface Message {
 class Simulation {
   private readonly replicas: Replica[];
   private readonly online: boolean[];
+  /**
+   * What an editor showing each replica would display: updated only from the
+   * replica's reported remote changes and from local edits. It must always
+   * match the CRDT, which checks every reported change position.
+   */
+  private readonly mirrors: string[];
   private inFlight: Message[] = [];
   private insertedCount = 0;
   private readonly deletedTargets = new Set<string>();
@@ -102,6 +109,16 @@ class Simulation {
   constructor(count: number) {
     this.replicas = Array.from({ length: count }, (_, i) => new Replica(`r${i}`));
     this.online = this.replicas.map(() => true);
+    this.mirrors = this.replicas.map(() => "");
+    this.replicas.forEach((replica, i) => {
+      replica.onRemoteChange = (change) => {
+        const text = this.mirrors[i]!;
+        this.mirrors[i] =
+          change.type === "insert"
+            ? text.slice(0, change.index) + change.text + text.slice(change.index)
+            : text.slice(0, change.index) + text.slice(change.index + change.count);
+      };
+    });
   }
 
   run(command: Command): void {
@@ -137,6 +154,9 @@ class Simulation {
       expect(replica.toString()).toBe(first!.toString());
       expect(replica.versionVector()).toEqual(first!.versionVector());
     }
+    this.replicas.forEach((replica, i) => {
+      expect(this.mirrors[i]).toBe(replica.toString());
+    });
     for (const replica of this.replicas) {
       expect(replica.pendingCount).toBe(0);
       expect(replica.length).toBe(replica.toString().length);
@@ -148,10 +168,13 @@ class Simulation {
   private insert(r: number, at: number, text: string): void {
     const replica = this.replicas[r]!;
     const before = replica.toString();
+    expect(this.mirrors[r]).toBe(before);
     const index = at % (before.length + 1);
     const ops = replica.insert(index, text);
     // Local edits must do exactly what a plain string would.
-    expect(replica.toString()).toBe(before.slice(0, index) + text + before.slice(index));
+    const after = before.slice(0, index) + text + before.slice(index);
+    expect(replica.toString()).toBe(after);
+    this.mirrors[r] = after;
     this.insertedCount += ops.length;
     this.broadcast(r, ops);
   }
@@ -159,11 +182,14 @@ class Simulation {
   private delete(r: number, at: number, count: number): void {
     const replica = this.replicas[r]!;
     const before = replica.toString();
+    expect(this.mirrors[r]).toBe(before);
     if (before.length === 0) return;
     const index = at % before.length;
     const clamped = Math.min(count, before.length - index);
     const ops = replica.delete(index, clamped);
-    expect(replica.toString()).toBe(before.slice(0, index) + before.slice(index + clamped));
+    const after = before.slice(0, index) + before.slice(index + clamped);
+    expect(replica.toString()).toBe(after);
+    this.mirrors[r] = after;
     for (const op of ops) this.deletedTargets.add(idKey(op.target));
     this.broadcast(r, ops);
   }

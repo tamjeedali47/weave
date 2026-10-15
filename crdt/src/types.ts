@@ -35,6 +35,14 @@ export interface DeleteOp {
 
 export type Op = InsertOp | DeleteOp;
 
+/**
+ * The visible effect of applying a remote op, as a position in the text
+ * just before the change. This is what an editor needs to mirror the CRDT.
+ */
+export type TextChange =
+  | { readonly type: "insert"; readonly index: number; readonly text: string }
+  | { readonly type: "delete"; readonly index: number; readonly count: number };
+
 /** Map key for an ID. Counters contain no comma, so the split is unambiguous. */
 export function idKey(id: Id): string {
   return `${id.counter},${id.replica}`;

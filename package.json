@@ -1,0 +1,13 @@
+{
+  "name": "weave",
+  "private": true,
+  "workspaces": [
+    "crdt",
+    "client"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w client",
+    "test": "npm test -w crdt",
+    "typecheck": "npm run typecheck --workspaces"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  // Library code runs in browsers: check it without Node globals.
+  "compilerOptions": { "types": [] },
+  "include": ["src"]
+}
