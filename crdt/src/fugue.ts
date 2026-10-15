@@ -67,6 +67,12 @@ export class FugueDoc {
     return Object.fromEntries(this.vv);
   }
 
+  /** Whether the operation with this ID has been applied. */
+  has(id: Id): boolean {
+    // Counters are gapless and applied in order, so the version vector is exact.
+    return (this.vv.get(id.replica) ?? 0) >= id.counter;
+  }
+
   /** Inserts `text` so that its first character ends up at `index`. */
   insert(index: number, text: string): InsertOp[] {
     this.checkRange(index, 0);

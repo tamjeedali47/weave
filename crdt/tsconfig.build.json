@@ -1,5 +1,6 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "noEmit": false, "rootDir": "src" },
+  // The library runs in browsers: no Node globals outside the tests.
+  "compilerOptions": { "noEmit": false, "rootDir": "src", "types": [] },
   "include": ["src"]
 }
